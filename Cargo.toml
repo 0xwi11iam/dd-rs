@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 description = "A safe, modern Rust+C alternative to dd — data duplication, conversion, and transformation tool"
 license = "MIT OR Apache-2.0"
-authors = ["dd-rs Contributors"]
+authors = ["0xwi11iam"]
+repository = "https://github.com/0xwi11iam/dd-rs"
+homepage = "https://github.com/0xwi11iam/dd-rs"
+keywords = ["dd", "data", "copy", "disk", "safety"]
+categories = ["command-line-utilities", "filesystem"]
+readme = "README.md"
 build = "build.rs"
 
 [[bin]]
@@ -19,27 +24,11 @@ path = "src/lib.rs"
 # CLI argument parsing
 clap = { version = "4", features = ["derive", "wrap_help"] }
 
-# Better error handling
+# Error handling
 thiserror = "2"
-anyhow = "1"
-
-# Progress indicators
-indicatif = "0.17"
-
-# Async runtime for potential parallel I/O
-tokio = { version = "1", features = ["fs", "io-util", "rt", "sync"], optional = true }
-
-# Byte-level operations
-bytes = "1"
 
 # Signal handling
 signal-hook = "0.3"
-
-# Terminal interaction
-atty = "0.2"
-
-# Memory mapping for large files
-memmap2 = "0.9"
 
 # C foreign function interface
 libc = "0.2"
@@ -47,6 +36,9 @@ libc = "0.2"
 # Logging
 log = "0.4"
 env_logger = "0.11"
+
+# Progress bars (planned)
+indicatif = { version = "0.17", optional = true }
 
 [build-dependencies]
 cc = "1"
@@ -58,8 +50,7 @@ criterion = "0.5"
 
 [features]
 default = []
-async-io = ["tokio"]
-direct-io = []
+progress-bar = ["indicatif"]
 
 [[bench]]
 name = "throughput"

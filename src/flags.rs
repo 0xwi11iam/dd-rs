@@ -7,6 +7,24 @@
 /// flags (like O_DIRECT) are not available; those are compiled out with a
 /// warning.
 
+// ---------------------------------------------------------------------------
+// Platform support for I/O flags:
+//
+//   Flag        Linux   macOS   Notes
+//   ─────────   ─────   ─────   ─────────────────────────────────────────
+//   append      ✅      ✅      O_APPEND (POSIX)
+//   direct      ✅      ❌      O_DIRECT (Linux-only, silently ignored on macOS)
+//   directory   ✅      ✅      Path check (no open flag needed)
+//   dsync       ✅      ❌      O_DSYNC (Linux-only)
+//   sync        ✅      ❌      O_SYNC (Linux-only)
+//   nonblock    ✅      ✅      O_NONBLOCK (POSIX)
+//   noatime     ✅      ❌      O_NOATIME (Linux-only)
+//   nocache     ✅      ❌      posix_fadvise (Linux-only, best-effort)
+//   noctty      ✅      ✅      O_NOCTTY (POSIX)
+//   nofollow    ✅      ✅      O_NOFOLLOW (POSIX)
+//   fullblock   ✅      ✅      Userspace accumulation (no syscall needed)
+// ---------------------------------------------------------------------------
+
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::AsRawFd;

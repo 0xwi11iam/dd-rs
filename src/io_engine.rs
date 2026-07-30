@@ -283,6 +283,8 @@ fn copy_file_range_all(input_fd: i32, output_fd: i32, size: usize) -> io::Result
     Ok(total)
 }
 
+/// Single `copy_file_range(2)` call — Linux 4.5+ only.
+/// On macOS/BSD this returns `Unsupported`; the caller falls back to read/write.
 fn copy_file_range_single(input_fd: i32, output_fd: i32, size: usize) -> io::Result<usize> {
     #[cfg(target_os = "linux")]
     {
@@ -309,6 +311,58 @@ fn copy_file_range_single(input_fd: i32, output_fd: i32, size: usize) -> io::Res
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "copy_file_range not available on this platform",
+        ))
+    }
+}
+
+/// `sendfile(2)` wrapper — platform-specific signatures:
+///
+///   Linux:   sendfile(out_fd, in_fd, offset, count) → ssize_t
+///   macOS:   sendfile(in_fd, out_fd, offset, &len, headers, flags) → int
+///
+/// The argument order is REVERSED between Linux and macOS.
+/// This stub returns Unsupported on non-Linux; macOS fcopyfile support is planned.
+#[allow(dead_code)]
+fn sendfile_single(
+    _in_fd: i32,
+    _out_fd: i32,
+    _size: usize,
+) -> io::Result<usize> {
+    #[cfg(target_os = "linux")]
+    {
+        let result = unsafe {
+            libc::sendfile(
+                _out_fd,  // out_fd first on Linux
+                _in_fd,   // in_fd second on Linux
+                std::ptr::null_mut::<libc::loff_t>(),
+                _size,
+            )
+        };
+        if result >= 0 {
+            Ok(result as usize)
+        } else {
+            Err(io::Error::last_os_error())
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // macOS sendfile(in_fd, out_fd, offset, &len, headers, flags)
+        // The in/out order is REVERSED vs Linux. Not yet implemented —
+        // the standard read/write path handles macOS perfectly well.
+        let _ = (_in_fd, _out_fd, _size);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "sendfile on macOS uses a different API — fcopyfile() support planned",
+        ))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = (_in_fd, _out_fd, _size);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "sendfile not available on this platform",
         ))
     }
 }

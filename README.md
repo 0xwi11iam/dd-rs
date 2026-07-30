@@ -56,13 +56,19 @@ GNU dd is powerful but dangerous. It was designed in the 1970s for tape drives a
 
 ## Installation
 
-### One-liner (recommended)
+### Cargo (recommended)
+
+```bash
+cargo install dd-rs
+```
+
+That's it. Requires Rust 1.70+ and a C compiler.
+
+### One-liner
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0xwi11iam/dd-rs/main/install.sh | bash
 ```
-
-This clones the repo, checks for Rust + a C compiler, builds, and installs to `/usr/local/bin/dd-rs`.
 
 ### From source
 

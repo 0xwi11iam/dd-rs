@@ -647,14 +647,25 @@ pub enum DeviceType {
 }
 
 /// Check if a path refers to a block device and gather information about it.
+/// Handles edge cases: empty paths, symlinks, non-existent files, permission errors.
 pub fn inspect_output_target(path: &Path) -> Result<DeviceInfo> {
-    let metadata = match fs::metadata(path) {
+    // Edge case: empty path
+    if path.as_os_str().is_empty() {
+        return Err(Error::InvalidArgument("output path is empty".into()));
+    }
+
+    // Try to canonicalize (resolve symlinks) — but don't fail if we can't.
+    // Canonicalize fails if the file doesn't exist, which is fine for new files.
+    let resolved_path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+
+    let metadata = match fs::symlink_metadata(&resolved_path) {
         Ok(m) => m,
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            // File doesn't exist yet — safe to create
             return Ok(DeviceInfo {
                 path: path.to_path_buf(),
-                device_name: "new file".into(),
+                device_name: path.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.to_string_lossy().to_string()),
                 size_bytes: 0,
                 is_mounted: false,
                 mount_points: vec![],
@@ -664,6 +675,7 @@ pub fn inspect_output_target(path: &Path) -> Result<DeviceInfo> {
         Err(e) => return Err(Error::Io(e)),
     };
 
+    // Use the canonicalized path's metadata to detect device type
     let device_type = if metadata.file_type().is_block_device() {
         DeviceType::BlockDevice
     } else if metadata.file_type().is_char_device() {
@@ -675,13 +687,22 @@ pub fn inspect_output_target(path: &Path) -> Result<DeviceInfo> {
     };
 
     let size_bytes = metadata.len();
-    let device_name = path
+    let device_name = resolved_path
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string_lossy().to_string());
+        .unwrap_or_else(|| resolved_path.to_string_lossy().to_string());
 
-    // Check if it's mounted (platform-specific)
-    let (is_mounted, mount_points) = check_if_mounted(path);
+    // Check if it's mounted (platform-specific) — use the resolved path
+    let (is_mounted, mount_points) = check_if_mounted(&resolved_path);
+
+    // If the original path was a symlink, note it in the device name
+    let device_name = if path.is_symlink() {
+        format!("{} → {}", path.file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.to_string_lossy().to_string()), device_name)
+    } else {
+        device_name
+    };
 
     Ok(DeviceInfo {
         path: path.to_path_buf(),

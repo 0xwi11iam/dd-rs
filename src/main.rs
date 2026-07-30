@@ -183,7 +183,7 @@ fn cmd_copy(raw_args: &[String]) {
     if get_flag_opt(&flags, &["explain", "E"]).is_some() { dd_args.push("--explain".to_string()); }
     if get_flag_opt(&flags, &["yes", "y"]).is_some() { dd_args.push("--yes".to_string()); }
     if get_flag_opt(&flags, &["force"]).is_some() { dd_args.push("--force".to_string()); }
-    run_legacy(&preprocess_dd_args(&dd_args));
+    run_legacy_or_exit(&preprocess_dd_args(&dd_args));
 }
 
 fn cmd_zero(raw_args: &[String]) {
@@ -195,7 +195,7 @@ fn cmd_zero(raw_args: &[String]) {
     let size = get_flag(&flags, &["size", "bytes", "count"], "");
     if size.is_empty() { eprintln!("dd-rs zero: --size is required\nExample: dd-rs zero disk.img --size 1G"); process::exit(1); }
     let bs = get_flag(&flags, &["bs", "block-size"], "1M");
-    run_legacy(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/zero".to_string(),
+    run_legacy_or_exit(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/zero".to_string(),
         format!("of={}", output), format!("bs={}", bs), format!("count={}", size),
         "--status".to_string(), "progress".to_string()]));
 }
@@ -208,7 +208,7 @@ fn cmd_random(raw_args: &[String]) {
     });
     let size = get_flag(&flags, &["bytes", "size", "count"], "");
     if size.is_empty() { eprintln!("dd-rs random: --bytes is required\nExample: dd-rs random key.bin --bytes 32"); process::exit(1); }
-    run_legacy(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/urandom".to_string(),
+    run_legacy_or_exit(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/urandom".to_string(),
         format!("of={}", output), format!("bs=1"), format!("count={}", size),
         "--status".to_string(), "progress".to_string()]));
 }
@@ -250,7 +250,7 @@ fn cmd_explain(raw_args: &[String]) {
     let mut full = vec!["dd-rs".to_string()];
     full.extend(dd_args);
     full.push("--explain".to_string());
-    run_legacy(&preprocess_dd_args(&full));
+    run_legacy_or_exit(&preprocess_dd_args(&full));
 }
 
 fn cmd_wipe(raw_args: &[String]) {
@@ -261,21 +261,19 @@ fn cmd_wipe(raw_args: &[String]) {
     });
     let bs = get_flag(&flags, &["bs", "block-size"], "4M");
     eprintln!("dd-rs wipe: This will DESTROY ALL DATA on '{}'", device);
-    run_legacy(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/zero".to_string(),
+    run_legacy_or_exit(&preprocess_dd_args(&vec!["dd-rs".to_string(), "if=/dev/zero".to_string(),
         format!("of={}", device), format!("bs={}", bs), "--status".to_string(), "progress".to_string()]));
 }
 
 // =============================================================================
 // Legacy engine runner (shared by main and subcommands)
+// Returns Ok(exit_code) on success or Err on failure.
 // =============================================================================
 
-fn run_legacy(processed_args: &[String]) {
-    let cli_args = match CliArgs::try_parse_from(processed_args) {
-        Ok(a) => a, Err(e) => { eprintln!("dd-rs: {}", e); process::exit(1); }
-    };
-    let config = match args::resolve_config(cli_args) {
-        Ok(c) => c, Err(e) => { eprintln!("dd-rs: {}", e); process::exit(1); }
-    };
+fn run_legacy(processed_args: &[String]) -> Result<i32, dd_rs::Error> {
+    let cli_args = CliArgs::try_parse_from(processed_args)
+        .map_err(|e| dd_rs::Error::InvalidArgument(e.to_string()))?;
+    let config = args::resolve_config(cli_args)?;
 
     if config.explain {
         dd_rs::explain::explain(
@@ -284,7 +282,7 @@ fn run_legacy(processed_args: &[String]) {
             config.count_bytes, config.skip_bytes, config.seek_bytes,
             &config.conv, &config.iflags, &config.oflags,
         );
-        return;
+        return Ok(0);
     }
 
     if config.dry_run {
@@ -293,7 +291,7 @@ fn run_legacy(processed_args: &[String]) {
             config.input_path.as_deref().unwrap_or("stdin"),
             config.output_path.as_deref().unwrap_or("stdout"),
             config.ibs, config.obs, config.count);
-        return;
+        return Ok(0);
     }
 
     // Safety check
@@ -306,10 +304,11 @@ fn run_legacy(processed_args: &[String]) {
                 Ok(safety::SafetyDecision::Safe | safety::SafetyDecision::Confirmed) => {}
                 Ok(safety::SafetyDecision::WarningIssued) => eprintln!("dd-rs: proceeding with warnings.\n"),
                 Ok(safety::SafetyDecision::Blocked { reason }) => {
-                    eprintln!("dd-rs: SAFETY BLOCK: {}\nUse --yes or --force to bypass.", reason);
-                    process::exit(1);
+                    return Err(dd_rs::Error::Other(format!(
+                        "SAFETY BLOCK: {}\nUse --yes or --force to bypass.", reason
+                    )));
                 }
-                Err(e) => { eprintln!("dd-rs: {}", e); process::exit(1); }
+                Err(e) => return Err(e),
             }
         }
     }
@@ -322,11 +321,11 @@ fn run_legacy(processed_args: &[String]) {
 
     let input = flags::open_input(&flags::InputOptions {
         path: config.input_path.clone(), flags: config.iflags.clone(), must_be_directory: false,
-    }).unwrap_or_else(|e| { eprintln!("dd-rs: input: {}", e); process::exit(1); });
+    })?;
 
     let output = flags::open_output(&flags::OutputOptions {
         path: config.output_path.clone(), flags: config.oflags.clone(), excl, nocreat, notrunc, must_be_directory: false,
-    }).unwrap_or_else(|e| { eprintln!("dd-rs: output: {}", e); process::exit(1); });
+    })?;
 
     let engine_config = EngineConfig {
         input, output,
@@ -336,11 +335,25 @@ fn run_legacy(processed_args: &[String]) {
         conv: conv_pipeline, iflags: config.iflags, oflags: config.oflags, status_level: config.status_level,
     };
 
-    match io_engine::run_transfer(engine_config) {
-        Ok(r) => { if r.read_errors > 0 { process::exit(2); } }
+    let report = io_engine::run_transfer(engine_config)?;
+    if report.read_errors > 0 {
+        Ok(2)
+    } else {
+        Ok(0)
+    }
+}
+
+/// Run legacy and handle exit codes for subcommand dispatch.
+fn run_legacy_or_exit(processed_args: &[String]) {
+    match run_legacy(processed_args) {
+        Ok(exit_code) => {
+            if exit_code != 0 {
+                process::exit(exit_code);
+            }
+        }
         Err(e) => {
             eprintln!("dd-rs: {}", e);
-            match &e { 
+            match &e {
                 dd_rs::Error::ReadError{..} | dd_rs::Error::WriteError{..} => process::exit(2),
                 dd_rs::Error::Conversion(_) => process::exit(3),
                 _ => process::exit(1),
@@ -365,6 +378,6 @@ fn main() {
         Subcommand::Info => cmd_info(&raw_args),
         Subcommand::Explain => cmd_explain(&raw_args),
         Subcommand::Wipe => cmd_wipe(&raw_args),
-        Subcommand::Legacy => run_legacy(&preprocess_dd_args(&raw_args)),
+        Subcommand::Legacy => run_legacy_or_exit(&preprocess_dd_args(&raw_args)),
     }
 }
