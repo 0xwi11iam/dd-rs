@@ -1,5 +1,8 @@
 # dd-rs — A Safe, Modern alternative to `dd`
 
+## Inspiration
+Numerous devs have struggled with the annoying commands in dd that is standard in Unix and many databases and SSDs have been wrecked (me included) by the pure destructive potential of the tool with no safety confirmations built in 1970s. I built this for safety and easier commands so new devs can use the power of the tool with appropriate safety guardrails so no more SSDs get wiped by mistake!
+
 **dd-rs** is a Rust+C reimplementation of the Unix `dd` command — the standard tool for copying and converting data. It matches every feature of GNU dd while adding safety guards, performance optimizations, and a modern CLI that won't let you accidentally destroy your hard drive.
 
 ```
@@ -802,7 +805,7 @@ Use `--yes` for non-interactive mode or `--force` to skip all checks.
 
 ### What's with the name?
 
-**Exa** + **rid** — to rid yourself of dd's danger. Also "exabyte" (10¹⁸ bytes).
+I just like it. dd made in Rust
 
 ### Why Rust + C?
 
