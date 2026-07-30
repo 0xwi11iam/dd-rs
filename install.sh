@@ -5,7 +5,7 @@ set -euo pipefail
 # dd-rs installer — one-liner to get dd-rs on your system
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/dd-rs/dd-rs/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/0xwi11iam/dd-rs/main/install.sh | bash
 #
 # What it does:
 #   1. Checks for required dependencies (rust/cargo, cc, git, make)
@@ -15,7 +15,7 @@ set -euo pipefail
 #   5. Cleans up
 ################################################################################
 
-REPO_URL="https://github.com/dd-rs/dd-rs.git"
+REPO_URL="https://github.com/0xwi11iam/dd-rs.git"
 INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="dd-rs"
 TMP_DIR=""
@@ -131,7 +131,7 @@ if command -v git &>/dev/null; then
     ok "Repository cloned"
 else
     # Fallback: download tarball
-    TARBALL_URL="https://github.com/dd-rs/dd-rs/archive/refs/heads/main.tar.gz"
+    TARBALL_URL="https://github.com/0xwi11iam/dd-rs/archive/refs/heads/main.tar.gz"
     info "Downloading $TARBALL_URL ..."
     if command -v curl &>/dev/null; then
         curl -fsSL "$TARBALL_URL" -o dd-rs.tar.gz

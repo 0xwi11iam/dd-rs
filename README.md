@@ -56,7 +56,7 @@ GNU dd is powerful but dangerous. It was designed in the 1970s for tape drives a
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dd-rs/dd-rs/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/0xwi11iam/dd-rs/main/install.sh | bash
 ```
 
 This clones the repo, checks for Rust + a C compiler, builds, and installs to `/usr/local/bin/dd-rs`.
@@ -64,7 +64,7 @@ This clones the repo, checks for Rust + a C compiler, builds, and installs to `/
 ### From source
 
 ```bash
-git clone https://github.com/dd-rs/dd-rs.git
+git clone https://github.com/0xwi11iam/dd-rs.git
 cd dd-rs
 cargo build --release
 sudo cp target/release/dd-rs /usr/local/bin/
