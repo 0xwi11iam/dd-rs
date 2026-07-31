@@ -1,27 +1,22 @@
-/// Status and progress reporting.
+/// Status and progress reporting with indicatif progress bar.
 ///
-/// Supports three levels (like GNU dd's `status=`):
+/// Supports four levels (like GNU dd's `status=`):
 ///   - `none`:   suppress all output except errors
-///   - `noxfer`: suppress transfer statistics (just show errors)
-///   - `progress`: show periodic transfer statistics (default)
-///
-/// Plus dd-rs extras:
+///   - `noxfer`: suppress transfer statistics
+///   - `progress`: show indicatif progress bar (default)
 ///   - `json`:   print final stats as JSON to stderr
-///   - `bar`:    show a progress bar (using indicatif)
 
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
+use indicatif::{ProgressBar, ProgressStyle};
+
 /// Status verbosity level.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusLevel {
-    /// Suppress all informational output.
     None,
-    /// Show errors only; suppress final transfer stats.
     Noxfer,
-    /// Show periodic progress and final transfer stats (default).
     Progress,
-    /// Like progress, but output final stats as JSON.
     Json,
 }
 
@@ -41,225 +36,201 @@ impl StatusLevel {
 // Transfer statistics
 // =============================================================================
 
-/// Statistics for a dd-style transfer.
 #[derive(Debug, Clone)]
 pub struct TransferStats {
-    /// Full input blocks read.
     pub full_blocks_in: u64,
-    /// Partial input blocks read.
     pub partial_blocks_in: u64,
-    /// Full output blocks written.
     pub full_blocks_out: u64,
-    /// Partial output blocks written.
     pub partial_blocks_out: u64,
-    /// Total bytes read.
     pub bytes_read: u64,
-    /// Total bytes written.
     pub bytes_written: u64,
-    /// Number of read errors recovered from (noerror mode).
     pub read_errors: u64,
-    /// Wall-clock start time.
     pub start_time: Instant,
-    /// Wall-clock end time.
     pub end_time: Option<Instant>,
 }
 
 impl TransferStats {
     pub fn new() -> Self {
         Self {
-            full_blocks_in: 0,
-            partial_blocks_in: 0,
-            full_blocks_out: 0,
-            partial_blocks_out: 0,
-            bytes_read: 0,
-            bytes_written: 0,
-            read_errors: 0,
-            start_time: Instant::now(),
-            end_time: None,
+            full_blocks_in: 0, partial_blocks_in: 0,
+            full_blocks_out: 0, partial_blocks_out: 0,
+            bytes_read: 0, bytes_written: 0, read_errors: 0,
+            start_time: Instant::now(), end_time: None,
         }
     }
 
-    /// Mark transfer complete.
-    pub fn finish(&mut self) {
-        self.end_time = Some(Instant::now());
-    }
+    pub fn finish(&mut self) { self.end_time = Some(Instant::now()); }
 
-    /// Get elapsed duration.
     pub fn elapsed(&self) -> Duration {
-        self.end_time
-            .unwrap_or_else(|| Instant::now())
-            .duration_since(self.start_time)
+        self.end_time.unwrap_or_else(|| Instant::now()).duration_since(self.start_time)
     }
 
-    /// Get throughput in bytes/sec.
     pub fn throughput_bytes_per_sec(&self) -> f64 {
-        let elapsed_secs = self.elapsed().as_secs_f64();
-        if elapsed_secs > 0.0 {
-            self.bytes_written as f64 / elapsed_secs
-        } else {
-            0.0
-        }
+        let s = self.elapsed().as_secs_f64();
+        if s > 0.0 { self.bytes_written as f64 / s } else { 0.0 }
     }
 
-    /// Format throughput as a human-readable string.
     pub fn format_throughput(&self) -> String {
         let bps = self.throughput_bytes_per_sec();
-        if bps >= 1_000_000_000.0 {
-            format!("{:.1} GB/s", bps / 1_000_000_000.0)
-        } else if bps >= 1_000_000.0 {
-            format!("{:.1} MB/s", bps / 1_000_000.0)
-        } else if bps >= 1_000.0 {
-            format!("{:.1} kB/s", bps / 1_000.0)
-        } else {
-            format!("{:.0} B/s", bps)
-        }
+        if bps >= 1_000_000_000.0 { format!("{:.1} GB/s", bps / 1_000_000_000.0) }
+        else if bps >= 1_000_000.0 { format!("{:.1} MB/s", bps / 1_000_000.0) }
+        else if bps >= 1_000.0 { format!("{:.1} kB/s", bps / 1_000.0) }
+        else { format!("{:.0} B/s", bps) }
     }
 }
 
+fn format_size(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 { format!("{:.2} GB", bytes as f64 / 1_000_000_000.0) }
+    else if bytes >= 1_000_000 { format!("{:.2} MB", bytes as f64 / 1_000_000.0) }
+    else if bytes >= 1_000 { format!("{:.2} kB", bytes as f64 / 1_000.0) }
+    else { format!("{} B", bytes) }
+}
+
 // =============================================================================
-// Status reporter
+// Status reporter with indicatif progress bar
 // =============================================================================
 
-/// Renders transfer status to stderr.
 pub struct StatusReporter {
     level: StatusLevel,
     stats: TransferStats,
-    last_report: Instant,
-    report_interval: Duration,
+    bar: Option<ProgressBar>,
+    total: Option<u64>,
 }
 
 impl StatusReporter {
-    pub fn new(level: StatusLevel) -> Self {
-        Self {
-            level,
-            stats: TransferStats::new(),
-            last_report: Instant::now(),
-            report_interval: Duration::from_secs(1),
-        }
+    pub fn new(level: StatusLevel, total_bytes: Option<u64>) -> Self {
+        let bar = if level == StatusLevel::Progress {
+            let pb = ProgressBar::new(total_bytes.unwrap_or(0));
+            if total_bytes.is_some() {
+                // Bounded transfer — show percentage, ETA, speed, bar
+                pb.set_style(
+                    ProgressStyle::with_template(
+                        "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})"
+                    )
+                    .unwrap()
+                    .progress_chars("#>-")
+                );
+            } else {
+                // Unbounded transfer — show spinner, bytes, speed (no percentage)
+                pb.set_style(
+                    ProgressStyle::with_template(
+                        "{spinner:.green} [{elapsed_precise}] {bytes} ({bytes_per_sec})"
+                    )
+                    .unwrap()
+                );
+            }
+            pb.enable_steady_tick(Duration::from_millis(100));
+            Some(pb)
+        } else {
+            None
+        };
+
+        Self { level, stats: TransferStats::new(), bar, total: total_bytes }
     }
 
-    pub fn stats(&self) -> &TransferStats {
-        &self.stats
-    }
+    pub fn stats(&self) -> &TransferStats { &self.stats }
+    pub fn stats_mut(&mut self) -> &mut TransferStats { &mut self.stats }
 
-    pub fn stats_mut(&mut self) -> &mut TransferStats {
-        &mut self.stats
-    }
-
-    /// Record a full block read.
     pub fn record_full_block_in(&mut self, bytes: u64) {
         self.stats.full_blocks_in += 1;
         self.stats.bytes_read += bytes;
+        self.tick(bytes);
     }
 
-    /// Record a partial block read.
     pub fn record_partial_block_in(&mut self, bytes: u64) {
         self.stats.partial_blocks_in += 1;
         self.stats.bytes_read += bytes;
+        self.tick(bytes);
     }
 
-    /// Record a full block written.
     pub fn record_full_block_out(&mut self, bytes: u64) {
         self.stats.full_blocks_out += 1;
         self.stats.bytes_written += bytes;
+        self.tick(bytes);
     }
 
-    /// Record a partial block written.
     pub fn record_partial_block_out(&mut self, bytes: u64) {
         self.stats.partial_blocks_out += 1;
         self.stats.bytes_written += bytes;
+        self.tick(bytes);
     }
 
-    /// Record a recovered read error (noerror mode).
     pub fn record_read_error(&mut self) {
         self.stats.read_errors += 1;
     }
 
-    /// Print progress if enough time has elapsed.
+    /// Advance the progress bar by `bytes` if active.
+    fn tick(&mut self, bytes: u64) {
+        if let Some(ref bar) = self.bar {
+            if let Some(total) = self.total {
+                // Bounded: set absolute position
+                let pos = self.stats.bytes_written.min(total);
+                bar.set_position(pos);
+            } else {
+                // Unbounded: increment by bytes
+                bar.inc(bytes);
+            }
+        }
+    }
+
+    /// Print progress if enough time has elapsed (legacy text fallback).
     pub fn maybe_report_progress(&mut self) {
-        if self.level != StatusLevel::Progress {
-            return;
-        }
-        let now = Instant::now();
-        if now.duration_since(self.last_report) < self.report_interval {
-            return;
-        }
-        self.last_report = now;
+        // With indicatif, the bar handles its own rendering — nothing to do here
+        if self.bar.is_some() { return; }
 
+        if self.level != StatusLevel::Progress { return; }
         let stats = &self.stats;
-        let elapsed = stats.elapsed();
-        let _bps = stats.throughput_bytes_per_sec();
-
         let bw = stats.bytes_written;
-        eprint!(
-            "\r{} bytes ({:.1} {}) copied, {:.1}s, {}",
+        eprint!("\r{} ({}) copied, {}, {}",
+            format_size(bw),
             bw,
-            if bw >= 1_000_000_000 {
-                bw as f64 / 1_000_000_000.0
-            } else if bw >= 1_000_000 {
-                bw as f64 / 1_000_000.0
-            } else if bw >= 1_000 {
-                bw as f64 / 1_000.0
-            } else {
-                bw as f64
-            },
-            if bw >= 1_000_000_000 {
-                "GB"
-            } else if bw >= 1_000_000 {
-                "MB"
-            } else if bw >= 1_000 {
-                "kB"
-            } else {
-                "B"
-            },
-            elapsed.as_secs_f64(),
+            stats.elapsed().as_secs_f64(),
             stats.format_throughput(),
         );
         let _ = io::stderr().flush();
     }
 
-    /// Print final summary to stderr.
+    /// Print final summary and finish the bar.
     pub fn report_final(&mut self) {
         self.stats.finish();
+
+        // Finish the progress bar cleanly
+        if let Some(ref bar) = self.bar {
+            if let Some(total) = self.total {
+                bar.set_position(total);
+            }
+            bar.finish_and_clear();
+        }
 
         match self.level {
             StatusLevel::None => return,
             StatusLevel::Json => {
-                let stats = &self.stats;
-                let elapsed = stats.elapsed().as_secs_f64();
-                let bps = stats.throughput_bytes_per_sec();
+                let s = &self.stats;
+                let elapsed = s.elapsed().as_secs_f64();
+                let bps = s.throughput_bytes_per_sec();
                 eprintln!(
                     "{{\n  \"bytes_read\": {},\n  \"bytes_written\": {},\n  \
                      \"full_blocks_in\": {},\n  \"partial_blocks_in\": {},\n  \
                      \"full_blocks_out\": {},\n  \"partial_blocks_out\": {},\n  \
                      \"read_errors\": {},\n  \"elapsed_seconds\": {:.6},\n  \
                      \"throughput_bytes_per_sec\": {:.1}\n}}",
-                    stats.bytes_read,
-                    stats.bytes_written,
-                    stats.full_blocks_in,
-                    stats.partial_blocks_in,
-                    stats.full_blocks_out,
-                    stats.partial_blocks_out,
-                    stats.read_errors,
-                    elapsed,
-                    bps,
+                    s.bytes_read, s.bytes_written,
+                    s.full_blocks_in, s.partial_blocks_in,
+                    s.full_blocks_out, s.partial_blocks_out,
+                    s.read_errors, elapsed, bps,
                 );
             }
             _ => {
-                let stats = &self.stats;
+                let s = &self.stats;
                 eprintln!(
                     "{}+{} records in\n{}+{} records out\n{} bytes transferred in {:.6} secs ({})",
-                    stats.full_blocks_in,
-                    stats.partial_blocks_in,
-                    stats.full_blocks_out,
-                    stats.partial_blocks_out,
-                    stats.bytes_written,
-                    stats.elapsed().as_secs_f64(),
-                    stats.format_throughput(),
+                    s.full_blocks_in, s.partial_blocks_in,
+                    s.full_blocks_out, s.partial_blocks_out,
+                    s.bytes_written,
+                    s.elapsed().as_secs_f64(),
+                    s.format_throughput(),
                 );
             }
         }
     }
 }
-
-

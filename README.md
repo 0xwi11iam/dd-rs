@@ -819,9 +819,6 @@ EBCDIC tables are large `const` arrays best expressed in C. Everything else is s
 
 ---
 
-## License
-
-MIT OR Apache-2.0
 
 <p align="center">
   <sub>Built to make <code>dd</code> safe. Never accidentally destroy a disk again.</sub>

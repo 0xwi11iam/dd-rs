@@ -210,7 +210,8 @@ fn run_kernel_zero_copy(config: EngineConfig) -> Result<TransferReport> {
         status_level,
     } = config;
 
-    let mut reporter = StatusReporter::new(status_level);
+    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
+    let mut reporter = StatusReporter::new(status_level, remaining);
 
     let skip_bytes = if skip_bytes { skip } else { skip * ibs as u64 };
     if skip_bytes > 0 {
@@ -225,7 +226,6 @@ fn run_kernel_zero_copy(config: EngineConfig) -> Result<TransferReport> {
     let input_fd = input.as_raw_fd();
     let output_fd = output.as_raw_fd();
     let mut total_copied: u64 = 0;
-    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
     let chunk_size: usize = 128 * 1024 * 1024; // 128 MiB
 
     loop {
@@ -381,14 +381,14 @@ fn run_double_buffered(config: EngineConfig) -> Result<TransferReport> {
     let buf_size = ibs.max(obs).max(cbs).max(64 * 1024);
     let mut buf_a = vec![0u8; buf_size];
     let mut buf_b = vec![0u8; buf_size];
-    let mut reporter = StatusReporter::new(status_level);
+    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
+    let mut reporter = StatusReporter::new(status_level, remaining);
 
     let skip_bytes = if skip_bytes { skip } else { skip * ibs as u64 };
     if skip_bytes > 0 { skip_input_seek(&mut input, skip_bytes)?; }
     let seek_bytes = if seek_bytes { seek } else { seek * ibs as u64 };
     if seek_bytes > 0 { output.seek(SeekFrom::Start(seek_bytes)).map_err(|e| Error::Io(e))?; }
 
-    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
     let mut bytes_copied: u64 = 0;
     let mut ctx = ConvContext::new(cbs, ibs);
     let mut partial_out: Vec<u8> = Vec::new();
@@ -461,15 +461,15 @@ fn run_standard(config: EngineConfig) -> Result<TransferReport> {
     let fullblock = iflags.contains(&IoFlag::Fullblock);
     let noerror = conv.has_noerror();
     let buf_size = ibs.max(obs).max(cbs).max(64 * 1024);
+    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
     let mut read_buf = vec![0u8; buf_size];
-    let mut reporter = StatusReporter::new(status_level);
+    let mut reporter = StatusReporter::new(status_level, remaining);
 
     let skip_bytes = if skip_bytes { skip } else { skip * ibs as u64 };
     if skip_bytes > 0 { skip_input_seek(&mut input, skip_bytes)?; }
     let seek_bytes = if seek_bytes { seek } else { seek * ibs as u64 };
     if seek_bytes > 0 { output.seek(SeekFrom::Start(seek_bytes)).map_err(|e| Error::Io(e))?; }
 
-    let remaining = if count_bytes { count } else { count.map(|c| c * ibs as u64) };
     let mut bytes_copied: u64 = 0;
     let mut ctx = ConvContext::new(cbs, ibs);
     let mut partial_out: Vec<u8> = Vec::new();

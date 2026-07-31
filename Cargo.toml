@@ -37,8 +37,8 @@ libc = "0.2"
 log = "0.4"
 env_logger = "0.11"
 
-# Progress bars (planned)
-indicatif = { version = "0.17", optional = true }
+# Progress bars
+indicatif = "0.17"
 
 [build-dependencies]
 cc = "1"
@@ -50,7 +50,6 @@ criterion = "0.5"
 
 [features]
 default = []
-progress-bar = ["indicatif"]
 
 [[bench]]
 name = "throughput"
