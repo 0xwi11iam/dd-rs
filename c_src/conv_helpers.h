@@ -1,5 +1,5 @@
-#ifndef EXARID_CONV_HELPERS_H
-#define EXARID_CONV_HELPERS_H
+#ifndef DD_RS_CONV_HELPERS_H
+#define DD_RS_CONV_HELPERS_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,4 +26,4 @@ size_t map_lcase(uint8_t *buf, size_t len);
 /// Map lowercase a-z to uppercase A-Z in-place. Returns the buffer length.
 size_t map_ucase(uint8_t *buf, size_t len);
 
-#endif // EXARID_CONV_HELPERS_H
+#endif // DD_RS_CONV_HELPERS_H

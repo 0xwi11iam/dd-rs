@@ -273,7 +273,11 @@ fn cmd_wipe(raw_args: &[String]) {
 fn run_legacy(processed_args: &[String]) -> Result<i32, dd_rs::Error> {
     let cli_args = CliArgs::try_parse_from(processed_args)
         .map_err(|e| dd_rs::Error::InvalidArgument(e.to_string()))?;
-    let config = args::resolve_config(cli_args)?;
+
+    // Suppress advisory warnings when in explain mode
+    let is_explain = processed_args.iter().any(|a| a == "--explain" || a == "-E")
+        || cli_args.explain;
+    let config = args::resolve_config(cli_args, is_explain)?;
 
     if config.explain {
         dd_rs::explain::explain(

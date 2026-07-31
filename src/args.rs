@@ -169,7 +169,8 @@ pub struct ResolvedConfig {
 }
 
 /// Parse and validate all CLI arguments into a ResolvedConfig.
-pub fn resolve_config(args: CliArgs) -> crate::error::Result<ResolvedConfig> {
+/// Set `quiet` to true to suppress advisory warnings (used by --explain mode).
+pub fn resolve_config(args: CliArgs, quiet: bool) -> crate::error::Result<ResolvedConfig> {
     // --- Block sizes ---
     let ibs_size = sizes::parse_positive_size(&args.ibs)?;
     let obs_size = sizes::parse_positive_size(&args.obs)?;
@@ -252,7 +253,7 @@ pub fn resolve_config(args: CliArgs) -> crate::error::Result<ResolvedConfig> {
     };
 
     // Warn about small block sizes (the #1 performance killer)
-    if ibs_bytes < 4096 && !args.auto_tune {
+    if ibs_bytes < 4096 && !args.auto_tune && !quiet {
         eprintln!(
             "dd-rs: note: block size is {} bytes. For better performance, try --auto-tune\n\
              or set bs=128K or larger. Small block sizes cause millions of syscalls/second.",

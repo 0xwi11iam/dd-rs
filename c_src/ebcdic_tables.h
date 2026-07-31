@@ -1,5 +1,5 @@
-#ifndef EXARID_EBCDIC_TABLES_H
-#define EXARID_EBCDIC_TABLES_H
+#ifndef DD_RS_EBCDIC_TABLES_H
+#define DD_RS_EBCDIC_TABLES_H
 
 #include <stdint.h>
 
@@ -18,4 +18,4 @@ extern const uint8_t IBM_EBCDIC_TO_ASCII[256];
 /// ASCII to alternate EBCDIC (IBM1047) table.
 extern const uint8_t ASCII_TO_IBM_EBCDIC[256];
 
-#endif // EXARID_EBCDIC_TABLES_H
+#endif // DD_RS_EBCDIC_TABLES_H
