@@ -25,7 +25,7 @@
 //!
 //! // Parse CLI
 //! let args = CliArgs::parse_from(["dd-rs", "if=input.dat", "of=output.dat", "bs=1M"]);
-//! let config = resolve_config(args).unwrap();
+//! let config = resolve_config(args, false).unwrap();
 //!
 //! // Or use programmatically
 //! use dd_rs::io_engine::{EngineConfig, run_transfer};

@@ -1,11 +1,11 @@
 # dd-rs Reference Card
 
-> Quick syntax reference. For full documentation, see [README.md](README.md).
+> Quick syntax reference. Full docs: [README.md](README.md)
 
 ## Legacy dd Syntax (100% compatible)
 
 ```
-dd-rs if=FILE of=FILE [ibs=N] [obs=N] [bs=N] [cbs=N] [count=N] [skip=N] [seek=N] [iseek=N] [oseek=N] [conv=LIST] [iflag=LIST] [oflag=LIST] [status=LEVEL]
+dd-rs if=FILE of=FILE [ibs=N] [obs=N] [bs=N] [cbs=N] [count=N] [skip=N] [seek=N] [conv=LIST] [iflag=LIST] [oflag=LIST] [status=LEVEL]
 ```
 
 ## Modern Subcommands
@@ -67,7 +67,7 @@ Pipeline order: `ebcdic/ascii/ibm → block/unblock → lcase/ucase → swab →
 | `b` | 512 | `G` | 1024³ | `GB` | 1000³ |
 | | | `KiB` | 1024 | `xM` | ×1024² |
 
-`count=512B` = 512 bytes (GNU byte-count mode). `0xFF` = hex.
+`count=512B` = 512 bytes (GNU byte-count). `0xFF` = hex.
 
 ## Status Levels
 
@@ -75,8 +75,15 @@ Pipeline order: `ebcdic/ascii/ibm → block/unblock → lcase/ucase → swab →
 |-------|--------|
 | `none` | No output except errors |
 | `noxfer` | No final stats |
-| `progress` | Periodic progress (default) |
+| `progress` | **Indicatif progress bar** (default) — shows ████, speed, ETA |
 | `json` | Final stats as JSON |
+
+## Progress Bar
+
+`status=progress` (default) shows a visual progress bar:
+
+- **Bounded** (count specified): `⏳ [00:02] [████████░░░░] 2.1 GB/5.0 GB (1.2 GB/s, 3s)`
+- **Unbounded** (no count): `⏳ [00:05] 4.2 GB (980 MB/s)`
 
 ## Safety Flags
 
@@ -106,27 +113,38 @@ dd-rs if=input of=output bs=1M
 # First 10 MiB
 dd-rs if=big of=chunk bs=1M count=10
 
-# Clone disk
+# Clone disk (with safety confirmation)
 dd-rs if=/dev/sda of=/dev/sdb bs=4M status=progress
 
 # Rescue failing disk
 dd-rs if=/dev/bad of=recovery.img conv=noerror,sync bs=4M
 
-# Sparse file
+# Sparse file (uses almost no disk space)
 dd-rs if=/dev/zero of=sparse.img bs=1M count=10240 conv=sparse
 
-# Byte swap
+# Byte swap (endianness)
 dd-rs if=be.dat of=le.dat conv=swab
 
-# EBCDIC→ASCII
+# EBCDIC→ASCII (mainframe data)
 dd-rs if=ebcdic.dat of=ascii.txt conv=ascii cbs=80
 
-# Random key
-dd-rs if=/dev/urandom of=key.bin bs=32 count=1
+# Random 32-byte key
+dd-rs random key.bin --bytes 32
 
-# Write at offset
+# Write at offset (don't truncate)
 dd-rs if=patch of=file seek=1024 conv=notrunc
 
 # Explain before running
-dd-rs explain if=/dev/zero of=/dev/sda bs=4M count=1000
+dd-rs explain if=/dev/zero of=/dev/sda bs=4M
+
+# Modern syntax
+dd-rs copy /dev/zero test.bin --size 1M --count 100
+dd-rs zero empty.img --size 1G
+dd-rs info /dev/nvme0n1
+```
+
+## Install
+
+```bash
+cargo install dd-rs
 ```
