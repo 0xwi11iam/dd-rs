@@ -48,7 +48,7 @@ GNU dd is powerful but dangerous. It was designed in the 1970s for tape drives a
 | **Silently destroys disks** — `dd if=img of=/dev/sda` runs with zero warnings | **5-layer safety system** — detects block devices, mounted partitions, system disks, and prompts for confirmation |
 | **512-byte default block size** — causes millions of syscalls/sec on modern NVMe drives, wasting CPU | **Auto-tuned block sizes** — defaults to 128 KiB, uses `copy_file_range(2)` for zero-copy kernel transfers |
 | **Cryptic `key=value` syntax** — hard to remember, easy to mistype | **Dual syntax** — legacy `if=/dev/zero of=out bs=1M` AND modern `dd-rs copy /dev/zero out --size 1M` |
-| **No progress** — you don't know if it's working or hung | **Progress by default** — shows speed, ETA, bytes transferred. JSON output for scripting. `SIGUSR1` for on-demand stats. |
+| **No progress** — you don't know if it's working or hung | **Visual progress bar** — indicatif-powered ████ bar with speed, ETA, and throughput. `status=json` for scripting. `SIGUSR1` for on-demand stats. |
 | **No explanation** — what does `conv=swab,noerror,sync` actually do? | **`--explain` mode** — explains every operand, shows data flow, assesses risk, estimates time |
 | **2500 lines of 1970s C** — hard to audit, no memory safety | **Memory-safe Rust** — no buffer overflows, no use-after-free, with C only for lookup tables |
 
@@ -56,13 +56,11 @@ GNU dd is powerful but dangerous. It was designed in the 1970s for tape drives a
 
 ## Installation
 
-### Cargo (recommended)
+### Cargo (fastest)
 
 ```bash
 cargo install dd-rs
 ```
-
-That's it. Requires Rust 1.70+ and a C compiler.
 
 ### One-liner
 
@@ -70,11 +68,12 @@ That's it. Requires Rust 1.70+ and a C compiler.
 curl -fsSL https://raw.githubusercontent.com/0xwi11iam/dd-rs/main/install.sh | bash
 ```
 
+The installer tries `cargo install` first. Falls back to building from source if needed.
+
 ### From source
 
 ```bash
-git clone https://github.com/0xwi11iam/dd-rs.git
-cd dd-rs
+git clone https://github.com/0xwi11iam/dd-rs.git && cd dd-rs
 cargo build --release
 sudo cp target/release/dd-rs /usr/local/bin/
 ```
@@ -85,15 +84,11 @@ sudo cp target/release/dd-rs /usr/local/bin/
 
 ```bash
 $ dd-rs --version
-dd-rs 0.1.0
+dd-rs 0.1.1
 
 $ dd-rs info /dev/null
-╔══════════════════════════════════════════════════════════════╗
-║                    DD-RS DEVICE INFO                         ║
-╚══════════════════════════════════════════════════════════════╝
-  Path:        /dev/null
-  Type:        CharDevice
-  Risk:        0/100 (Safe)
+  dd-rs — Command Explanation
+  /dev/null    🟢 Risk: 0/100  Safe
 ```
 
 ---
@@ -401,13 +396,24 @@ The `status=` operand controls what dd-rs prints to stderr.
 |-------|-----------|
 | `none` | Suppress all output except fatal errors. Like `dd status=none`. |
 | `noxfer` | Suppress final transfer statistics. Errors are still shown. |
-| `progress` | **Default in dd-rs.** Shows periodic progress: bytes transferred, speed, elapsed time. |
+| `progress` | **Default in dd-rs.** Visual indicatif progress bar with speed and ETA. |
 | `json` | Output final statistics as a single JSON object to stderr. Ideal for scripting. |
 
-### Progress Output
+### Progress Output (bounded)
 
 ```
-104857600 bytes (100.0 MB) copied, 0.042s, 2.5 GB/s
+⏳ [00:02] [████████████░░░░░░░░░░░░] 2.10 GB/5.00 GB (1.2 GB/s, 3s)
+```
+
+When no `count=` is specified (unbounded transfer), shows a spinner with speed:
+
+```
+⏳ [00:05] 4.2 GB (980 MB/s)
+```
+
+Final summary after completion:
+
+```
 100+0 records in
 100+0 records out
 104857600 bytes transferred in 0.042000 secs (2.5 GB/s)
